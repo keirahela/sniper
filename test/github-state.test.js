@@ -8,13 +8,15 @@ const env = { GITHUB_REPOSITORY: 'example/video-alerts', GITHUB_TOKEN: 'fixture-
 const nextState = () => ({ ...freshState(config), lastSeenId: '102', pending: [{ id: '101', url: 'https://x.com/IndieGameJoe/status/101' }] });
 
 function fakeGitHub() {
-  const data = { branch: false, file: null, sha: null, commits: 0, denyWrites: false };
+  const data = { branch: false, files: new Map(), commits: 0, denyWrites: false };
   const fetchFn = async (url, options) => {
     assert.equal(options.headers.Authorization, 'Bearer fixture-token');
     const path = new URL(url).pathname;
     const body = options.body ? JSON.parse(options.body) : undefined;
     if (options.method === 'GET' && path.endsWith('/git/ref/heads/video-alert-state')) return Response.json(data.branch ? { object: { sha: env.GITHUB_SHA } } : {}, { status: data.branch ? 200 : 404 });
-    if (options.method === 'GET' && path.endsWith('/contents/checkpoint.json')) return Response.json(data.file ? { type: 'file', encoding: 'base64', content: data.file, sha: data.sha } : {}, { status: data.file ? 200 : 404 });
+    const filePath = path.split('/contents/')[1];
+    const file = data.files.get(filePath);
+    if (options.method === 'GET' && filePath) return Response.json(file ? { type: 'file', encoding: 'base64', ...file } : {}, { status: file ? 200 : 404 });
     if (data.denyWrites) return Response.json({}, { status: 403 });
     if (options.method === 'POST' && path.endsWith('/git/refs')) {
       assert.equal(body.ref, 'refs/heads/video-alert-state');
@@ -22,12 +24,12 @@ function fakeGitHub() {
       data.branch = true;
       return Response.json({}, { status: 201 });
     }
-    if (options.method === 'PUT' && path.endsWith('/contents/checkpoint.json')) {
-      if (body.sha !== (data.sha ?? undefined)) return Response.json({}, { status: 409 });
+    if (options.method === 'PUT' && filePath) {
+      if (body.sha !== file?.sha) return Response.json({}, { status: 409 });
       assert.equal(body.branch, 'video-alert-state');
-      data.file = body.content;
-      data.sha = `blob-${++data.commits}`;
-      return Response.json({ content: { sha: data.sha } }, { status: 201 });
+      const sha = `blob-${++data.commits}`;
+      data.files.set(filePath, { content: body.content, sha });
+      return Response.json({ content: { sha } }, { status: 201 });
     }
     assert.fail(`unexpected mock request ${options.method} ${path}`);
   };
@@ -39,7 +41,7 @@ test('GitHub checkpoint survives fresh runners and excludes Discord IDs and unre
   const first = new GitHubStateStore(config, env, fetchFn);
   assert.equal((await first.load()).lastSeenId, null);
   await first.save(nextState());
-  const persisted = Buffer.from(data.file, 'base64').toString('utf8');
+  const persisted = Buffer.from(data.files.get('checkpoints/indiegamejoe.json').content, 'base64').toString('utf8');
   assert.equal(persisted.includes(config.channelId), false);
   assert.equal(persisted.includes(config.userId), false);
   assert.equal(persisted.includes(env.GITHUB_TOKEN), false);
@@ -74,7 +76,25 @@ test('GitHub failures and corrupt saved data never silently reset a checkpoint',
   data.denyWrites = true;
   await assert.rejects(store.save(nextState()), /HTTP 403/);
   data.branch = true;
-  data.file = Buffer.from('corrupt').toString('base64');
-  data.sha = 'blob';
+  data.files.set('checkpoints/indiegamejoe.json', { content: Buffer.from('corrupt').toString('base64'), sha: 'blob' });
   await assert.rejects(store.load(), /corrupt/);
+});
+
+test('migrates the old checkpoint without losing pending alerts or assigning it to a new account', async () => {
+  const { data, fetchFn } = fakeGitHub();
+  data.branch = true;
+  const legacy = { content: Buffer.from(JSON.stringify(encodeCheckpoint(nextState(), config))).toString('base64'), sha: 'legacy-blob' };
+  data.files.set('checkpoint.json', legacy);
+  const joe = new GitHubStateStore(config, env, fetchFn);
+  assert.deepEqual(await joe.load(), nextState());
+  assert.equal(joe.needsMigration, true);
+  const libraryConfig = { ...config, username: 'IndieGamesLib' };
+  const library = new GitHubStateStore(libraryConfig, env, fetchFn);
+  assert.equal((await library.load()).lastSeenId, null);
+  await library.save({ ...freshState(libraryConfig), lastSeenId: '50' });
+  await joe.save(nextState());
+  assert.deepEqual(data.files.get('checkpoint.json'), legacy);
+  assert.equal(joe.needsMigration, false);
+  assert.deepEqual(await new GitHubStateStore(config, env, fetchFn).load(), nextState());
+  assert.equal((await new GitHubStateStore(libraryConfig, env, fetchFn).load()).lastSeenId, '50');
 });

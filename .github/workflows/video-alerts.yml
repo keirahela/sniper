@@ -26,7 +26,7 @@ jobs:
   check:
     if: github.event.repository.private == false
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
@@ -41,7 +41,6 @@ jobs:
         env:
           HEADLESS: 'true'
           BROWSER_CHANNEL: chrome
-          X_USERNAME: IndieGameJoe
           MAX_SCROLLS: '40'
           X_AUTH_JSON: ${{ secrets.X_AUTH_JSON }}
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}

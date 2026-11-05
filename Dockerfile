@@ -12,5 +12,6 @@ RUN npm ci --omit=dev \
     && chown node:node /app/.local
 
 COPY --chown=node:node src ./src
+COPY --chown=node:node accounts.json ./accounts.json
 USER node
 CMD ["node", "src/index.js"]

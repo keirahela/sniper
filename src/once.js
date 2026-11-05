@@ -1,11 +1,11 @@
-import { join } from 'node:path';
 import { dataDirectory, readConfig } from './config.js';
 import { openBrowser, XBrowser } from './x-browser.js';
 import { connectDiscord } from './discord.js';
 import { GitHubStateStore } from './github-state.js';
-import { loadState, saveState } from './state.js';
+import { accountStateStore } from './state.js';
 import { compareIds } from './posts.js';
 import { runCycle } from './cycle.js';
+import { runAccounts, cycleMessage } from './accounts.js';
 
 let context;
 let discord;
@@ -16,34 +16,34 @@ try {
   if (mode === 'test-discord') {
     discord = await connectDiscord(config);
     await discord.channel.send({
-      content: `<@${config.userId}> GitHub video alerts are connected. Watching https://x.com/${config.username}`,
+      content: `<@${config.userId}> GitHub video alerts are connected. Watching ${config.usernames.map(name => `@${name}`).join(', ')}`,
       allowedMentions: { parse: [], users: [config.userId] },
     });
     console.log('Test ping sent.');
   } else {
     context = await openBrowser(config.headless, { channel: config.browserChannel });
-    const source = new XBrowser(context, config);
-    if (mode === 'check') {
-      const posts = await source.scan();
-      for (const post of posts.sort((a, b) => compareIds(b.id, a.id))) console.log(`${post.hasVideo ? 'VIDEO' : 'other'} ${post.url}`);
-      console.log(`Read ${posts.length} posts. No messages sent and no checkpoint changed.`);
-    } else {
-      const path = join(dataDirectory, 'state.json');
+    const batch = await runAccounts(config, async account => {
+      const source = new XBrowser(context, account);
+      if (mode === 'check') {
+        const posts = await source.scan();
+        for (const post of posts.sort((a, b) => compareIds(b.id, a.id))) console.log(`${post.hasVideo ? 'VIDEO' : 'other'} ${post.url}`);
+        console.log(`@${account.username}: read ${posts.length} posts. No messages sent and no checkpoint changed.`);
+        return;
+      }
       const store = process.env.GITHUB_ACTIONS === 'true'
-        ? new GitHubStateStore(config)
-        : { load: () => loadState(path, config), save: state => saveState(path, state) };
+        ? new GitHubStateStore(account)
+        : accountStateStore(dataDirectory, account);
       const result = await runCycle({
         store,
         scan: sinceId => source.scan(sinceId),
         send: async post => {
           discord ??= await connectDiscord(config);
-          await discord.send(post);
+          await discord.send(post, account);
         },
       });
-      console.log(result.skipped ? `X rate-limit cooldown; next attempt after ${new Date(result.retryAfterAt).toISOString()}.` : result.baseline
-        ? `Baseline saved from ${result.postsRead} posts. Existing posts will not trigger alerts.`
-        : `Read ${result.postsRead} posts; sent ${result.alertsSent} video alert(s).`);
-    }
+      console.log(cycleMessage(account.username, result));
+    }, (username, error) => console.error(`@${username}: ${error.message}`));
+    if (batch.failures.length) process.exitCode = 1;
   }
 } catch (error) {
   // Messages intentionally omit request bodies, cookies, and tokens.

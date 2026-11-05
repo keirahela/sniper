@@ -36,7 +36,7 @@ npm run check
 
 Do not copy the Windows `.local/x-session` browser profile to Linux. Chromium profiles use operating-system-specific encryption. The bot imports the portable cookie export into a new Linux profile instead. A different IP or a data-center connection may still cause X to require re-verification or block the session; free hosting does not remove that limitation.
 
-Stop a running local bot before migrating. If it has already created `.local/state.json`, transfer that file too to preserve your checkpoint and pending alerts.
+Stop a running local bot before migrating. Transfer `.local/accounts` if it exists to preserve account checkpoints and pending alerts. The older `.local/state.json` is still supported for migration of its matching account.
 
 ## 2. Install Docker on the VM
 
@@ -81,12 +81,15 @@ Set-Location -LiteralPath 'C:\path\to\sniper'
 $botHost = 'YOUR_VM_PUBLIC_IP'
 $botKey = 'C:\path\to\your-private-key.key'
 
-scp -i $botKey Dockerfile compose.yaml .dockerignore package.json package-lock.json "ubuntu@${botHost}:~/sniper/"
+scp -i $botKey Dockerfile compose.yaml .dockerignore package.json package-lock.json accounts.json "ubuntu@${botHost}:~/sniper/"
 scp -i $botKey -r src "ubuntu@${botHost}:~/sniper/"
 scp -i $botKey .env "ubuntu@${botHost}:~/sniper/.env"
 scp -i $botKey .local/x-auth.json "ubuntu@${botHost}:~/sniper/.local/x-auth.json"
 
 # Only if you already ran the local bot and this file exists:
+if (Test-Path -LiteralPath '.local/accounts') {
+    scp -i $botKey -r .local/accounts "ubuntu@${botHost}:~/sniper/.local/"
+}
 if (Test-Path -LiteralPath '.local/state.json') {
     scp -i $botKey .local/state.json "ubuntu@${botHost}:~/sniper/.local/state.json"
 }
@@ -130,7 +133,7 @@ sudo docker compose up -d
 sudo docker compose up -d --build
 ```
 
-If X requires sign-in again, stop the service, run `npm run login:native` on your PC, and transfer the new `.local/x-auth.json`. The next start imports the fresh export. Keep `.local/state.json` to preserve queued alerts and your checkpoint. Then restart the service and check its logs. A challenge tied to the server's IP may require an interactive login from that server; repeated export attempts do not bypass X restrictions.
+If X requires sign-in again, stop the service, run `npm run login:native` on your PC, and transfer the new `.local/x-auth.json`. The next start imports the fresh export. Keep `.local/accounts` and any old `.local/state.json` to preserve queued alerts and checkpoints. Then restart the service and check its logs. A challenge tied to the server's IP may require an interactive login from that server; repeated export attempts do not bypass X restrictions.
 
 ## Why not Render Free?
 

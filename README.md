@@ -1,6 +1,17 @@
 # IndieGameJoe video alerts
 
-A discord.js bot that pings your user in a private Discord server when **@IndieGameJoe publishes a new X post with a video**, with a direct link to that post. The watched username is configurable.
+A discord.js bot that pings your user in a private Discord server when a watched X account publishes a new post with a video, with a direct link to that post.
+
+Edit **[accounts.json](accounts.json)** to manage the watched accounts:
+
+```json
+[
+  "IndieGameJoe",
+  "IndieGamesLib"
+]
+```
+
+Usernames, `@usernames`, and X profile URLs are accepted. Duplicate usernames are ignored without checking twice. Each account has its own checkpoint, pending alerts, and retry delay. Adding an account starts a baseline for that account and preserves the progress of the existing accounts.
 
 This version needs **no paid X API, third-party monitoring service, or API key**. Playwright opens X using a dedicated local browser session you sign in to yourself. Your computer must stay on and connected to the internet while the bot runs locally. For scheduled headless checks with your PC off, see [the GitHub Actions setup](GITHUB_HOSTING.md). The [Oracle VM guide](HOSTING.md) is another option when Always Free capacity is available.
 
@@ -30,7 +41,6 @@ Your `.env` needs these three values:
 DISCORD_TOKEN=your_bot_token
 DISCORD_CHANNEL_ID=your_text_channel_id
 DISCORD_USER_ID=your_user_id
-X_USERNAME=IndieGameJoe
 ```
 
 ### 2. Sign in to X once
@@ -64,7 +74,7 @@ npm run test:discord
 npm start
 ```
 
-The **first successful check sets a baseline**, so existing videos do not flood your channel. From then on, a new matching post produces:
+The **first successful check for each account sets its baseline**, so existing videos do not flood your channel. From then on, a new matching post produces:
 
 ```text
 @you New video post from @IndieGameJoe
@@ -86,14 +96,16 @@ The default interval is **120 seconds**, plus the time to load the page. Ctrl+C 
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `X_USERNAME` | `IndieGameJoe` | Username, `@username`, or profile URL |
+| `accounts.json` | `IndieGameJoe`, `IndieGamesLib` | Shared list of watched accounts; edit this file to add or remove accounts |
+| `X_USERNAMES` | unset | Optional comma-separated override for the file list |
+| `X_USERNAME` | unset | Legacy single-account override; remove it to use accounts.json |
 | `POLL_INTERVAL_SECONDS` | `120` | Delay between completed checks; minimum 60 |
 | `MAX_SCROLLS` | `20` | Scroll budget to catch up to the previous checkpoint |
 | `INCLUDE_QUOTED_VIDEOS` | `true` | Include video media inside quote posts |
 | `HEADLESS` | `true` | Set to `false` to inspect the monitoring browser |
 | `BROWSER_CHANNEL` | bundled Chromium | Optional `chrome`, `msedge`, or `chromium`; Actions uses installed Chrome |
 
-`npm run once` performs one monitoring cycle and exits. On GitHub Actions it persists its queue to the `video-alert-state` branch; locally it uses the same `.local/state.json` as continuous mode. See [GitHub setup](GITHUB_HOSTING.md) for credentials and scheduling.
+`npm run once` performs one monitoring cycle for every account and exits. On GitHub Actions it persists separate account queues to the `video-alert-state` branch; locally it uses `.local/accounts/<username>.json`, shared with continuous mode. The previous `.local/state.json` checkpoint is automatically migrated for its matching account without discarding pending alerts. See [GitHub setup](GITHUB_HOSTING.md) for credentials and scheduling.
 
 The prepared GitHub workflow runs in a **public repository every 30 minutes**, using free standard GitHub-hosted runner compute. Credentials stay in GitHub Secrets.
 
@@ -103,9 +115,9 @@ X does not provide a stable, supported browser scraping interface. This bot read
 
 Errors appear in the terminal and trigger increasing delays, up to 15 minutes. X HTTP 429 responses pause checks for at least 15 minutes. If the previous checkpoint cannot be reached within the scroll budget, the bot leaves it unchanged and reports an error; increase `MAX_SCROLLS` after a long outage. It cannot recover posts that X no longer serves.
 
-The bot saves its checkpoint and pending alerts together in `.local/state.json`. Failed sends remain queued and are retried before another X scan. Discord nonces reduce immediate duplicate sends; a crash after sending but before saving can still cause a duplicate later. Run only one monitoring process per project folder.
+The bot saves each account's checkpoint and pending alerts together in `.local/accounts/<username>.json`. Failed sends remain queued and are retried before that account's next X scan. If one account fails, the others are still checked. Discord nonces reduce immediate duplicate sends; a crash after sending but before saving can still cause a duplicate later. Run only one monitoring process per project folder.
 
-`.env` and `.local/` are excluded from Git. **The browser profiles and `.local/x-auth.json` contain your signed-in X session**; keep them private along with your Discord token. To forget the session, stop the bot, close the setup window, and remove `.local/x-session`, `.local/x-native-login`, and `.local/x-auth.json`. To start a new baseline, stop the bot and move `.local/state.json` aside; doing so also discards its pending alerts. Changing the watched account or Discord destination requires a fresh baseline.
+`.env` and `.local/` are excluded from Git. **The browser profiles and `.local/x-auth.json` contain your signed-in X session**; keep them private along with your Discord token. To forget the session, stop the bot, close the setup window, and remove `.local/x-session`, `.local/x-native-login`, and `.local/x-auth.json`. To reset an account, stop the bot and move its `.local/accounts/<username>.json` aside; doing so discards its pending alerts. Also move an old `.local/state.json` for that same account aside to prevent reimporting it. Adding a different account needs no reset. Changing the Discord destination requires fresh baselines.
 
 If X asks you to log in again, stop the bot and run `npm run login:native`. If monitoring Chromium is missing, run `npm run browser:install`.
 

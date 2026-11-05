@@ -36,10 +36,11 @@ export class GitHubStateStore {
     this.commit = env.GITHUB_SHA;
     this.base = `https://api.github.com/repos/${env.GITHUB_REPOSITORY}`;
     this.branch = 'video-alert-state';
-    this.path = 'checkpoint.json';
+    this.path = `checkpoints/${config.username.toLowerCase()}.json`;
     this.fetch = fetchFn;
     this.sha = undefined;
     this.branchExists = false;
+    this.needsMigration = false;
   }
 
   async request(method, path, body, allowMissing = false) {
@@ -65,9 +66,15 @@ export class GitHubStateStore {
     const reference = await this.request('GET', `/git/ref/heads/${this.branch}`, undefined, true);
     this.branchExists = reference !== null;
     this.sha = undefined;
+    this.needsMigration = false;
     if (!this.branchExists) return freshState(this.config);
-    const file = await this.request('GET', `/contents/${this.path}?ref=${this.branch}`, undefined, true);
-    if (!file) return freshState(this.config);
+    let file = await this.request('GET', `/contents/${this.path}?ref=${this.branch}`, undefined, true);
+    if (!file) {
+      // Preserve the existing single-account deployment; never reuse it for a new account.
+      file = await this.request('GET', `/contents/checkpoint.json?ref=${this.branch}`, undefined, true);
+      if (!file) return freshState(this.config);
+      this.needsMigration = true;
+    }
     if (file.type !== 'file' || file.encoding !== 'base64' || typeof file.content !== 'string' || typeof file.sha !== 'string') {
       throw new Error('GitHub checkpoint has an unexpected format; refusing to reset it.');
     }
@@ -75,7 +82,11 @@ export class GitHubStateStore {
     try { decoded = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')); } catch {
       throw new Error('GitHub checkpoint is corrupt; refusing to reset it.');
     }
-    this.sha = file.sha;
+    if (this.needsMigration && decoded.scope !== stateScope(this.config)) {
+      this.needsMigration = false;
+      return freshState(this.config);
+    }
+    if (!this.needsMigration) this.sha = file.sha;
     return decodeCheckpoint(decoded, this.config);
   }
 
@@ -93,5 +104,6 @@ export class GitHubStateStore {
     });
     if (typeof result?.content?.sha !== 'string') throw new Error('GitHub did not confirm checkpoint persistence; alerts were not acknowledged.');
     this.sha = result.content.sha;
+    this.needsMigration = false;
   }
 }

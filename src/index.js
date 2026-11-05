@@ -1,10 +1,11 @@
-import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { dataDirectory, readConfig } from './config.js';
 import { connectDiscord } from './discord.js';
-import { compareIds, queuePosts } from './posts.js';
-import { drainPending, loadState, saveState } from './state.js';
+import { compareIds } from './posts.js';
+import { accountStateStore } from './state.js';
 import { openBrowser, XBrowser } from './x-browser.js';
+import { runCycle } from './cycle.js';
+import { runAccounts, cycleMessage } from './accounts.js';
 
 const log = message => console.log(`${new Date().toISOString()} ${message}`);
 const stopping = new AbortController();
@@ -19,49 +20,44 @@ try {
   if (args.includes('--test-discord')) {
     discord = await connectDiscord(config);
     await discord.channel.send({
-      content: `<@${config.userId}> Video alerts are connected. Watching https://x.com/${config.username}`,
+      content: `<@${config.userId}> Video alerts are connected. Watching ${config.usernames.map(name => `@${name}`).join(', ')}`,
       allowedMentions: { parse: [], users: [config.userId] },
     });
     log('Test ping sent.');
   } else {
-    const path = join(dataDirectory, 'state.json');
-    // Check mode is read-only: it never modifies the baseline or sends a message.
-    if (!checkOnly) await loadState(path, config);
     context = await openBrowser(config.headless, { channel: config.browserChannel });
-    const source = new XBrowser(context, config);
+    const stores = new Map(config.usernames.map(username => [username, accountStateStore(dataDirectory, { ...config, username })]));
     if (checkOnly) {
-      const posts = await source.scan();
-      for (const post of posts.sort((a, b) => compareIds(b.id, a.id))) log(`${post.hasVideo ? 'VIDEO' : 'other'} ${post.url}`);
-      log(`Read ${posts.length} recent posts. No alerts sent and no checkpoint changed.`);
+      const batch = await runAccounts(config, async account => {
+        const posts = await new XBrowser(context, account).scan();
+        for (const post of posts.sort((a, b) => compareIds(b.id, a.id))) log(`${post.hasVideo ? 'VIDEO' : 'other'} ${post.url}`);
+        log(`@${account.username}: read ${posts.length} recent posts. No alerts sent and no checkpoint changed.`);
+      }, (username, error) => log(`@${username}: ${error.message}`));
+      if (batch.failures.length) process.exitCode = 1;
     } else {
       discord = await connectDiscord(config);
-      log(`Watching @${config.username}; checks every ${config.pollIntervalMs / 1000}s. Press Ctrl+C to stop.`);
-      let failures = 0;
+      log(`Watching ${config.usernames.map(name => `@${name}`).join(', ')}; checks every ${config.pollIntervalMs / 1000}s. Press Ctrl+C to stop.`);
+      const retry = new Map();
       while (!stopping.signal.aborted) {
-        let waitMs = config.pollIntervalMs;
-        try {
-          // Reload from disk on each attempt, including after a failed save or send.
-          let state = await loadState(path, config);
-          state = await drainPending(state, discord.send, next => saveState(path, next));
-          const firstRun = state.lastSeenId === null;
-          const posts = await source.scan(state.lastSeenId);
-          const next = queuePosts(state, posts);
-          // Persist the checkpoint and entire outbox together before contacting Discord.
-          await saveState(path, next);
-          const count = next.pending.length;
-          await drainPending(next, discord.send, value => saveState(path, value));
-          failures = 0;
-          log(firstRun ? 'Baseline saved; existing posts will not trigger alerts.' : `Check complete; ${count} video alert(s) sent.`);
-        } catch (error) {
-          if (stopping.signal.aborted) break;
-          // Exit on a browser crash so a hosting supervisor can restart it.
-          const browser = context.browser();
-          if (browser && !browser.isConnected()) throw error;
-          failures++;
-          waitMs = Math.max(error.retryAfterMs || 0, Math.min(config.pollIntervalMs * 2 ** Math.min(failures, 8), 15 * 60 * 1000));
-          log(`${error.message} Retrying in ${Math.ceil(waitMs / 1000)}s.`);
-        }
-        await delay(waitMs, undefined, { signal: stopping.signal }).catch(error => {
+        const batch = await runAccounts(config, async account => {
+          if (stopping.signal.aborted || (retry.get(account.username)?.after || 0) > Date.now()) return;
+          const result = await runCycle({
+            store: stores.get(account.username),
+            scan: sinceId => new XBrowser(context, account).scan(sinceId),
+            send: post => discord.send(post, account),
+          });
+          retry.delete(account.username);
+          log(cycleMessage(account.username, result));
+        }, (username, error) => {
+          if (stopping.signal.aborted) return;
+          const failures = (retry.get(username)?.failures || 0) + 1;
+          const waitMs = Math.max(error.retryAfterMs || 0, Math.min(config.pollIntervalMs * 2 ** Math.min(failures, 8), 15 * 60 * 1000));
+          retry.set(username, { failures, after: Date.now() + waitMs });
+          log(`@${username}: ${error.message} Retrying after ${Math.ceil(waitMs / 1000)}s.`);
+        });
+        const browser = context.browser();
+        if (batch.failures.length && browser && !browser.isConnected()) throw batch.failures[0].error;
+        await delay(config.pollIntervalMs, undefined, { signal: stopping.signal }).catch(error => {
           if (error.name !== 'AbortError') throw error;
         });
       }

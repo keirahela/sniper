@@ -47,6 +47,14 @@ test('an unchanged timeline does not create empty GitHub commits', async () => {
   assert.equal(store.writes.length, 0);
 });
 
+test('an unchanged migrated account still persists its checkpoint in the new location', async () => {
+  const store = memoryStore({ lastSeenId: '100', pending: [] });
+  store.needsMigration = true;
+  await runCycle({ store, scan: async () => [post('100')], send: async () => assert.fail('historical duplicate') });
+  assert.equal(store.writes.length, 1);
+  assert.equal(store.state.lastSeenId, '100');
+});
+
 test('X rate-limit cooldown survives separate scheduled runs', async () => {
   const store = memoryStore({ lastSeenId: '100', pending: [] });
   const rateLimit = Object.assign(new Error('X rate limited'), { retryAfterMs: 900000 });

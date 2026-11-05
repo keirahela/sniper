@@ -1,6 +1,6 @@
 # Run headless checks with GitHub Actions
 
-This setup runs one headless Chrome check about every **30 minutes** from a **public repository**, then exits. Your PC can be off. GitHub creates a fresh Ubuntu runner for each job; the bot keeps its checkpoint and pending alerts in a separate `video-alert-state` branch of the same repository.
+This setup checks every account in **[accounts.json](accounts.json)** using headless Chrome about every **30 minutes** from a **public repository**, then exits. Your PC can be off. GitHub creates a fresh Ubuntu runner for each job; the bot keeps each account's checkpoint and pending alerts in the `video-alert-state` branch of the same repository.
 
 It does not keep a Discord gateway connection online continuously. The bot may appear offline between runs and can still send alerts during a check. GitHub can delay or drop scheduled runs, so 30 minutes is a requested interval, not a delivery guarantee. X may challenge or reject the runner's data-center IP, even when your cookies work locally.
 
@@ -47,7 +47,7 @@ git pull --ff-only origin main
 After editing, stage the source and review the staged filenames before committing and pushing:
 
 ```powershell
-git add .github src test .gitignore .gitattributes .dockerignore .env.example package.json package-lock.json README.md GITHUB_HOSTING.md HOSTING.md Dockerfile compose.yaml
+git add .github src test accounts.json .gitignore .gitattributes .dockerignore .env.example package.json package-lock.json README.md GITHUB_HOSTING.md HOSTING.md Dockerfile compose.yaml
 git diff --cached --stat
 git commit -m "Update video alerts"
 git push origin main
@@ -77,13 +77,13 @@ In the repository's **Actions** tab, choose **X video alerts → Run workflow**.
 
 Run `check` first and confirm it succeeds. Run `test-discord` and confirm the ping arrives. Stop any local `npm start` process before using `monitor` so you don't have two independent monitors sending alerts.
 
-The **first successful monitor run establishes a new GitHub baseline**, without pinging existing videos. It does not import your local checkpoint. The 30-minute schedule starts automatically once the workflow is on the public repository's default branch and repository Actions are enabled. If GitHub asks you to enable workflows, use the repository's Actions settings.
+The **first successful monitor check for a new account establishes its baseline**, without pinging existing videos. It does not import your local checkpoint. Existing GitHub accounts preserve their progress when you add or reorder usernames. The previous single-account `checkpoint.json` is migrated into the matching account's file automatically. The 30-minute schedule starts automatically once the workflow is on the public repository's default branch and repository Actions are enabled. If GitHub asks you to enable workflows, use the repository's Actions settings.
 
 The first monitor run automatically creates the **`video-alert-state`** branch. Leave it in place. The workflow needs `contents: write` to save its checkpoint; allow that permission if repository/organisation policies restrict it. Branch protection or rulesets must allow this state branch to be updated by the workflow.
 
 ## How state and credentials are handled
 
-- The state branch stores the latest processed post ID, queued public post links, and a hash identifying the watched account and Discord destination. It does not store your raw Discord IDs, tokens, or cookies.
+- The state branch stores one file per account at `checkpoints/<username>.json`, containing its latest processed post ID, queued public post links, and a hash identifying the account and Discord destination. It does not store your raw Discord IDs, tokens, or cookies.
 - The pending queue is saved before sending to Discord. Each successful send is acknowledged immediately so a later failed job can resume. A crash between sending and acknowledgement can still cause a duplicate; Discord nonces reduce immediate duplicates.
 - No commit is created when the checkpoint and queue haven't changed. X HTTP 429 responses save a cooldown that later jobs respect.
 - The four secrets are injected only into the application step. Browser profiles, cookies, and `.env` files are never uploaded as artifacts or cached.
@@ -95,7 +95,9 @@ The schedule is `2,32 * * * *`: minutes **02 and 32** of every hour, in UTC. Sch
 
 To pause monitoring, use **Actions → X video alerts → … → Disable workflow**. To resume, enable it again. Changing `POLL_INTERVAL_SECONDS` does not affect this workflow's frequency; edit the cron expression instead.
 
-To watch another account, edit `X_USERNAME` in the workflow. Changing the watched account or Discord destination makes the previous checkpoint incompatible. Disable the workflow first, preserve any pending alerts you need, then delete the `video-alert-state` branch to establish a fresh baseline. Do not delete it routinely.
+To add or remove watched accounts, edit **accounts.json** and commit it to `main`. No workflow edits, new secrets, or checkpoint resets are needed. New accounts get their own baseline. Removed accounts keep their checkpoint so re-adding them can resume it. If one account fails, the workflow still checks the others and reports the failure under that account's name.
+
+Changing the Discord destination makes existing checkpoints incompatible. Disable the workflow first and preserve any pending alerts you need before resetting that destination's state. Do not delete the `video-alert-state` branch merely to change the account list.
 
 If X rejects or expires the session, update `X_AUTH_JSON` with fresh cookies from your usual browser, then run `check` again. Keep the state branch to preserve your checkpoint. A challenge from GitHub's IP may require a different host; repeatedly retrying does not bypass X restrictions.
 
@@ -105,7 +107,7 @@ If X rejects or expires the session, update `X_AUTH_JSON` with fresh cookies fro
 # Read-only check through the same one-shot entry point
 npm run once -- check
 
-# One monitor cycle using local .local/state.json, then exit
+# One monitor cycle for each account using local .local/accounts/ checkpoints, then exit
 npm run once
 
 # Existing continuous local mode

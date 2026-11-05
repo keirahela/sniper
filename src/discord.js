@@ -26,7 +26,7 @@ export async function connectDiscord(config) {
       throw new Error('Give the bot View Channel and Send Messages in the alert channel.');
     }
     await channel.guild.members.fetch(config.userId);
-    return { client, channel, send: post => channel.send(alertPayload(config, post)) };
+    return { client, channel, send: (post, accountConfig = config) => channel.send(alertPayload(accountConfig, post)) };
   } catch (error) {
     client.destroy();
     throw error;

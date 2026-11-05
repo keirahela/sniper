@@ -19,7 +19,7 @@ export async function runCycle({ store, scan, send, now = Date.now }) {
   const next = queuePosts(state, posts);
   delete next.retryAfterAt;
   // Save all pending alerts before sending; acknowledge each successful send durably.
-  if (JSON.stringify(next) !== JSON.stringify(state)) await save(next);
+  if (store.needsMigration || JSON.stringify(next) !== JSON.stringify(state)) await save(next);
   await drainPending(next, deliver, save);
   return { baseline, postsRead: posts.length, alertsSent };
 }
