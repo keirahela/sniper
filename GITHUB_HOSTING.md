@@ -47,7 +47,7 @@ git pull --ff-only origin main
 After editing, stage the source and review the staged filenames before committing and pushing:
 
 ```powershell
-git add .github src test .gitignore .dockerignore .env.example package.json package-lock.json README.md GITHUB_HOSTING.md HOSTING.md Dockerfile compose.yaml
+git add .github src test .gitignore .gitattributes .dockerignore .env.example package.json package-lock.json README.md GITHUB_HOSTING.md HOSTING.md Dockerfile compose.yaml
 git diff --cached --stat
 git commit -m "Update video alerts"
 git push origin main
@@ -114,6 +114,6 @@ npm start
 
 GitHub's Ubuntu runner already includes [Google Chrome](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md), so the workflow selects `BROWSER_CHANNEL=chrome` and avoids downloading Chromium on every run.
 
-The application and mock GitHub checkpoint API are tested locally. The repository workflow still needs its first real GitHub run; local success does not verify GitHub's IP access to X.
+Live GitHub validation on November 5, 2026: the [read-only headless check](https://github.com/keirahela/sniper/actions/runs/42094121978) and [initial monitor run](https://github.com/keirahela/sniper/actions/runs/42094325398) both succeeded. The monitor created its baseline in the `video-alert-state` branch. Discord channel permissions and target membership were also verified without sending a test message. Future sessions can still expire or be challenged by X.
 
 Vault notes consulted: **Git and Source Control for Roblox**; **HttpService and External APIs**.
