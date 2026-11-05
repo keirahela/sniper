@@ -1,0 +1,52 @@
+name: X video alerts
+
+on:
+  schedule:
+    - cron: '2,32 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'monitor saves the baseline and sends new alerts; check only reads X; test-discord sends one test ping'
+        required: true
+        default: monitor
+        type: choice
+        options:
+          - monitor
+          - check
+          - test-discord
+
+permissions:
+  contents: write
+
+concurrency:
+  group: x-video-alerts
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install dependencies
+        run: npm ci --omit=dev
+      - name: Run one check
+        env:
+          HEADLESS: 'true'
+          BROWSER_CHANNEL: chrome
+          X_USERNAME: IndieGameJoe
+          MAX_SCROLLS: '40'
+          X_AUTH_JSON: ${{ secrets.X_AUTH_JSON }}
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+          DISCORD_USER_ID: ${{ secrets.DISCORD_USER_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN_MODE: ${{ inputs.mode || 'monitor' }}
+        run: node src/once.js "$RUN_MODE"
