@@ -91,7 +91,7 @@ The first monitor run automatically creates the **`video-alert-state`** branch. 
 
 ## Frequency and upkeep
 
-The schedule is `2,32 * * * *`: minutes **02 and 32** of every hour, in UTC. Scheduled jobs can be delayed or dropped under load, and public-repository schedules can be disabled after 60 days without repository activity. Check the Actions tab periodically. [GitHub schedule behaviour](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
+The schedule is `23,53 * * * *`: minutes **23 and 53** of every hour, in UTC. Scheduled jobs can be delayed or dropped under load, and public-repository schedules can be disabled after 60 days without repository activity. Check the Actions tab periodically. A successful manually dispatched run verifies the bot, but only a run whose event is `schedule` verifies automatic triggering. [GitHub schedule behaviour](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
 
 To pause monitoring, use **Actions → X video alerts → … → Disable workflow**. To resume, enable it again. Changing `POLL_INTERVAL_SECONDS` does not affect this workflow's frequency; edit the cron expression instead.
 

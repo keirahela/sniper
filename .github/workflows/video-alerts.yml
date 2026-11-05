@@ -2,7 +2,7 @@ name: X video alerts
 
 on:
   schedule:
-    - cron: '2,32 * * * *'
+    - cron: '23,53 * * * *'
   workflow_dispatch:
     inputs:
       mode:
