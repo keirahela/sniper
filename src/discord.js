@@ -1,10 +1,19 @@
 import { once } from 'node:events';
 import { Client, Events, GatewayIntentBits, PermissionFlagsBits } from 'discord.js';
 
-export function alertPayload(config, post) {
+export function recipientMentions(config) {
+  const users = [...new Set(config.userIds ?? [config.userId])];
   return {
-    content: `<@${config.userId}> New video post from @${config.username}\n${post.url}`,
-    allowedMentions: { parse: [], users: [config.userId] },
+    content: users.map(id => `<@${id}>`).join(' '),
+    allowedMentions: { parse: [], users },
+  };
+}
+
+export function alertPayload(config, post) {
+  const mentions = recipientMentions(config);
+  return {
+    ...mentions,
+    content: `${mentions.content} New video post from @${config.username}\n${post.url}`,
     nonce: post.id,
     enforceNonce: true,
   };
@@ -25,7 +34,7 @@ export async function connectDiscord(config) {
     if (!permissions?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) {
       throw new Error('Give the bot View Channel and Send Messages in the alert channel.');
     }
-    await channel.guild.members.fetch(config.userId);
+    for (const id of config.userIds ?? [config.userId]) await channel.guild.members.fetch(id);
     return { client, channel, send: (post, accountConfig = config) => channel.send(alertPayload(accountConfig, post)) };
   } catch (error) {
     client.destroy();

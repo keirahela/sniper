@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readConfig, parseAccounts } from '../src/config.js';
-import { alertPayload } from '../src/discord.js';
+import { alertPayload, recipientMentions } from '../src/discord.js';
+import { encodeCheckpoint, decodeCheckpoint } from '../src/github-state.js';
+import { freshState } from '../src/state.js';
 
 test('configuration accepts the supplied profile URL without requiring Discord for setup', () => {
   const config = readConfig({ X_USERNAME: 'https://x.com/IndieGameJoe' }, { discord: false });
@@ -34,4 +36,26 @@ test('notification permits only the intended user mention and provides a dedupli
   assert.equal(payload.nonce, '2000000000000000001');
   assert.equal(payload.enforceNonce, true);
   assert.match(alertPayload({ userId: '123456789012345678', username: 'IndieGamesLib' }, { id: '101', url: 'https://x.com/IndieGamesLib/status/101' }).content, /from @IndieGamesLib/);
+});
+
+test('additional recipients keep the original user and allow only distinct user pings', () => {
+  const config = readConfig({ DISCORD_USER_ID: '123456789012345678', DISCORD_ADDITIONAL_USER_IDS: ' 123456789012345679,123456789012345678,123456789012345679 ' }, { discord: false });
+  assert.equal(config.userId, '123456789012345678');
+  assert.deepEqual(config.userIds, ['123456789012345678', '123456789012345679']);
+  const payload = alertPayload(config, { id: '101', url: 'https://x.com/IndieGameJoe/status/101' });
+  assert.equal(payload.content, '<@123456789012345678> <@123456789012345679> New video post from @IndieGameJoe\nhttps://x.com/IndieGameJoe/status/101');
+  assert.deepEqual(payload.allowedMentions, { parse: [], users: config.userIds });
+  assert.deepEqual(recipientMentions(config).allowedMentions, payload.allowedMentions);
+  for (const extra of ['@everyone', '123', '<@123456789012345679>']) {
+    assert.throws(() => readConfig({ DISCORD_ADDITIONAL_USER_IDS: extra }, { discord: false }), /valid user IDs/);
+  }
+});
+
+test('adding a notification recipient preserves existing checkpoints and pending alerts', () => {
+  const original = { username: 'IndieGameJoe', channelId: '123456789012345677', userId: '123456789012345678' };
+  const state = { ...freshState(original), lastSeenId: '102', pending: [{ id: '101', url: 'https://x.com/IndieGameJoe/status/101' }] };
+  const updated = { ...original, userIds: [original.userId, '123456789012345679'] };
+  assert.deepEqual(decodeCheckpoint(encodeCheckpoint(state, original), updated), state);
+  const publicState = JSON.stringify(encodeCheckpoint(state, updated));
+  assert.equal(publicState.includes('123456789012345679'), false);
 });

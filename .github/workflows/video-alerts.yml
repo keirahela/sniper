@@ -46,6 +46,7 @@ jobs:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
           DISCORD_USER_ID: ${{ secrets.DISCORD_USER_ID }}
+          DISCORD_ADDITIONAL_USER_IDS: ${{ secrets.DISCORD_ADDITIONAL_USER_IDS }}
           GITHUB_TOKEN: ${{ github.token }}
           RUN_MODE: ${{ inputs.mode || 'monitor' }}
         run: node src/once.js "$RUN_MODE"

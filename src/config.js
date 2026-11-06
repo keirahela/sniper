@@ -43,6 +43,9 @@ export function readConfig(env = process.env, { discord = true } = {}) {
   }
   const browserChannel = env.BROWSER_CHANNEL?.trim() || undefined;
   if (browserChannel && !['chromium', 'chrome', 'msedge'].includes(browserChannel)) throw new Error('BROWSER_CHANNEL must be chromium, chrome, or msedge.');
+  const userIds = [...new Set([env.DISCORD_USER_ID, ...(env.DISCORD_ADDITIONAL_USER_IDS || '').split(',')]
+    .map(value => value?.trim()).filter(Boolean))];
+  if (userIds.some(id => !/^\d{17,20}$/.test(id))) throw new Error('Discord recipient settings must contain valid user IDs, separated by commas.');
   const config = {
     username: usernames[0],
     usernames,
@@ -54,6 +57,7 @@ export function readConfig(env = process.env, { discord = true } = {}) {
     discordToken: env.DISCORD_TOKEN?.trim(),
     channelId: env.DISCORD_CHANNEL_ID?.trim(),
     userId: env.DISCORD_USER_ID?.trim(),
+    userIds,
   };
   if (discord) {
     if (!config.discordToken) throw new Error('Set DISCORD_TOKEN in .env first. See README.md.');

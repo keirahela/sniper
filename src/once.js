@@ -1,6 +1,6 @@
 import { dataDirectory, readConfig } from './config.js';
 import { openBrowser, XBrowser } from './x-browser.js';
-import { connectDiscord } from './discord.js';
+import { connectDiscord, recipientMentions } from './discord.js';
 import { GitHubStateStore } from './github-state.js';
 import { accountStateStore } from './state.js';
 import { compareIds } from './posts.js';
@@ -15,9 +15,10 @@ try {
   const config = readConfig(process.env, { discord: mode !== 'check' });
   if (mode === 'test-discord') {
     discord = await connectDiscord(config);
+    const mentions = recipientMentions(config);
     await discord.channel.send({
-      content: `<@${config.userId}> GitHub video alerts are connected. Watching ${config.usernames.map(name => `@${name}`).join(', ')}`,
-      allowedMentions: { parse: [], users: [config.userId] },
+      ...mentions,
+      content: `${mentions.content} GitHub video alerts are connected. Watching ${config.usernames.map(name => `@${name}`).join(', ')}`,
     });
     console.log('Test ping sent.');
   } else {

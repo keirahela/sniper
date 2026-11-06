@@ -1,6 +1,6 @@
 # IndieGameJoe video alerts
 
-A discord.js bot that pings your user in a private Discord server when a watched X account publishes a new post with a video, with a direct link to that post.
+A discord.js bot that pings selected users in a private Discord server when a watched X account publishes a new post with a video, with a direct link to that post.
 
 Edit **[accounts.json](accounts.json)** to manage the watched accounts:
 
@@ -34,6 +34,8 @@ If `.env` already exists, edit it instead of copying over it.
 3. Under **Installation** or **OAuth2 → URL Generator**, create a server install link with the `bot` scope and **View Channels**, **Send Messages**, and **Embed Links** permissions. Open the link and add the bot to your private server. It does not need Administrator or privileged gateway intents.
 4. In Discord, enable **User Settings → Advanced → Developer Mode**. Right-click the destination text channel and choose **Copy Channel ID**; put it in `DISCORD_CHANNEL_ID`. Right-click your user and choose **Copy User ID**; put it in `DISCORD_USER_ID`.
 5. Make sure the bot can view and send messages in that channel, and your user is a member of the server. Keep the channel private using Discord's channel permissions. The bot does not change server permissions.
+
+To ping more people alongside the original recipient, set `DISCORD_ADDITIONAL_USER_IDS` to a comma-separated list of user IDs. Each person must be a member of the server and able to see the alert channel. Duplicate IDs are mentioned only once. Adding extra recipients preserves account checkpoints and pending alerts; keep `DISCORD_USER_ID` unchanged.
 
 Your `.env` needs these three values:
 
@@ -97,6 +99,7 @@ The default interval is **120 seconds**, plus the time to load the page. Ctrl+C 
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `accounts.json` | `IndieGameJoe`, `IndieGamesLib` | Shared list of watched accounts; edit this file to add or remove accounts |
+| `DISCORD_ADDITIONAL_USER_IDS` | unset | Extra user IDs to ping alongside `DISCORD_USER_ID`, separated by commas |
 | `X_USERNAMES` | unset | Optional comma-separated override for the file list |
 | `X_USERNAME` | unset | Legacy single-account override; remove it to use accounts.json |
 | `POLL_INTERVAL_SECONDS` | `120` | Delay between completed checks; minimum 60 |
@@ -117,7 +120,7 @@ Errors appear in the terminal and trigger increasing delays, up to 15 minutes. X
 
 The bot saves each account's checkpoint and pending alerts together in `.local/accounts/<username>.json`. Failed sends remain queued and are retried before that account's next X scan. If one account fails, the others are still checked. Discord nonces reduce immediate duplicate sends; a crash after sending but before saving can still cause a duplicate later. Run only one monitoring process per project folder.
 
-`.env` and `.local/` are excluded from Git. **The browser profiles and `.local/x-auth.json` contain your signed-in X session**; keep them private along with your Discord token. To forget the session, stop the bot, close the setup window, and remove `.local/x-session`, `.local/x-native-login`, and `.local/x-auth.json`. To reset an account, stop the bot and move its `.local/accounts/<username>.json` aside; doing so discards its pending alerts. Also move an old `.local/state.json` for that same account aside to prevent reimporting it. Adding a different account needs no reset. Changing the Discord destination requires fresh baselines.
+`.env` and `.local/` are excluded from Git. **The browser profiles and `.local/x-auth.json` contain your signed-in X session**; keep them private along with your Discord token. To forget the session, stop the bot, close the setup window, and remove `.local/x-session`, `.local/x-native-login`, and `.local/x-auth.json`. To reset an account, stop the bot and move its `.local/accounts/<username>.json` aside; doing so discards its pending alerts. Also move an old `.local/state.json` for that same account aside to prevent reimporting it. Adding an account or extra recipients needs no reset. Changing the channel or primary `DISCORD_USER_ID` requires fresh baselines.
 
 If X asks you to log in again, stop the bot and run `npm run login:native`. If monitoring Chromium is missing, run `npm run browser:install`.
 

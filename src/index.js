@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { dataDirectory, readConfig } from './config.js';
-import { connectDiscord } from './discord.js';
+import { connectDiscord, recipientMentions } from './discord.js';
 import { compareIds } from './posts.js';
 import { accountStateStore } from './state.js';
 import { openBrowser, XBrowser } from './x-browser.js';
@@ -19,9 +19,10 @@ try {
   const config = readConfig(process.env, { discord: !checkOnly });
   if (args.includes('--test-discord')) {
     discord = await connectDiscord(config);
+    const mentions = recipientMentions(config);
     await discord.channel.send({
-      content: `<@${config.userId}> Video alerts are connected. Watching ${config.usernames.map(name => `@${name}`).join(', ')}`,
-      allowedMentions: { parse: [], users: [config.userId] },
+      ...mentions,
+      content: `${mentions.content} Video alerts are connected. Watching ${config.usernames.map(name => `@${name}`).join(', ')}`,
     });
     log('Test ping sent.');
   } else {

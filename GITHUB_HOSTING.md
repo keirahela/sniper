@@ -14,7 +14,7 @@ The workflow uses a **standard GitHub-hosted Ubuntu runner**, whose compute usag
 
 Use Git to publish the source. **Do not commit `.env`, `.local`, `node_modules`, or your browser profile.** They are excluded by `.gitignore`.
 
-## 2. Add four repository secrets
+## 2. Add repository secrets
 
 Open **Settings → Secrets and variables → Actions → New repository secret**. Add:
 
@@ -23,9 +23,12 @@ Open **Settings → Secrets and variables → Actions → New repository secret*
 | `DISCORD_TOKEN` | Your bot token from `.env` |
 | `DISCORD_CHANNEL_ID` | Your destination channel ID from `.env` |
 | `DISCORD_USER_ID` | Your user ID from `.env` |
+| `DISCORD_ADDITIONAL_USER_IDS` | Optional extra user IDs from `.env`, separated by commas; these are mentioned alongside the original recipient |
 | `X_AUTH_JSON` | The entire contents of `.local/x-auth.json`, including its outer braces |
 
 Copy the values directly into GitHub's secret fields. Do not put them in source files, issues, workflow YAML, or chat. You do not need a personal access token: the workflow receives a scoped `GITHUB_TOKEN` automatically.
+
+The four original secrets are required; `DISCORD_ADDITIONAL_USER_IDS` is optional. Adding or changing extra recipients keeps existing checkpoints and pending alerts. Leave the primary `DISCORD_USER_ID` in place and make sure every recipient is a server member with access to the alert channel.
 
 ## 3. Pull and push with Git
 
@@ -86,7 +89,7 @@ The first monitor run automatically creates the **`video-alert-state`** branch. 
 - The state branch stores one file per account at `checkpoints/<username>.json`, containing its latest processed post ID, queued public post links, and a hash identifying the account and Discord destination. It does not store your raw Discord IDs, tokens, or cookies.
 - The pending queue is saved before sending to Discord. Each successful send is acknowledged immediately so a later failed job can resume. A crash between sending and acknowledgement can still cause a duplicate; Discord nonces reduce immediate duplicates.
 - No commit is created when the checkpoint and queue haven't changed. X HTTP 429 responses save a cooldown that later jobs respect.
-- The four secrets are injected only into the application step. Browser profiles, cookies, and `.env` files are never uploaded as artifacts or cached.
+- Secrets are injected only into the application step. Browser profiles, cookies, and `.env` files are never uploaded as artifacts or cached.
 - The workflow prevents overlapping monitor jobs. The GitHub API also rejects stale checkpoint updates instead of overwriting newer progress.
 
 ## Frequency and upkeep
@@ -97,7 +100,7 @@ To pause monitoring, use **Actions → X video alerts → … → Disable workfl
 
 To add or remove watched accounts, edit **accounts.json** and commit it to `main`. No workflow edits, new secrets, or checkpoint resets are needed. New accounts get their own baseline. Removed accounts keep their checkpoint so re-adding them can resume it. If one account fails, the workflow still checks the others and reports the failure under that account's name.
 
-Changing the Discord destination makes existing checkpoints incompatible. Disable the workflow first and preserve any pending alerts you need before resetting that destination's state. Do not delete the `video-alert-state` branch merely to change the account list.
+Changing the Discord channel or primary `DISCORD_USER_ID` makes existing checkpoints incompatible. Disable the workflow first and preserve any pending alerts you need before resetting that destination's state. Extra recipients can be changed without a reset. Do not delete the `video-alert-state` branch merely to change the account list or add recipients.
 
 If X rejects or expires the session, update `X_AUTH_JSON` with fresh cookies from your usual browser, then run `check` again. Keep the state branch to preserve your checkpoint. A challenge from GitHub's IP may require a different host; repeatedly retrying does not bypass X restrictions.
 
