@@ -1,6 +1,15 @@
 {
   "version": 1,
   "scope": "d68c5e911de8182c11eca1ce7a2a4f6728f51158b492a67e92dbe5d02e42bc9c",
-  "lastSeenId": "2123741871419834753",
-  "pending": []
+  "lastSeenId": "2123860907650695314",
+  "pending": [
+    {
+      "id": "2123778388150120560",
+      "url": "https://x.com/IndieGamesLib/status/2123778388150120560"
+    },
+    {
+      "id": "2123853886004089120",
+      "url": "https://x.com/IndieGamesLib/status/2123853886004089120"
+    }
+  ]
 }
